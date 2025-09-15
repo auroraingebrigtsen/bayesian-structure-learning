@@ -1,3 +1,3 @@
 # bayesian-structure-learning
 
-Implementations of different bayesian structure learning algorithms.
+Implementations of different BN structure learning algorithms.
