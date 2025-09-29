@@ -6,50 +6,35 @@ arXiv preprint arXiv:1206.6875.
 
 import pandas as pd
 import numpy as np
-from sklearn.datasets import load_iris
 import pandas as pd
-from sklearn.preprocessing import KBinsDiscretizer
 from typing import List
+from collections import defaultdict
+from pgmpy.readwrite import BIFReader
+from pgmpy.sampling import BayesianModelSampling
+from pgmpy.estimators import BIC
 
+"""Create the true network and generate data"""
+reader = BIFReader("networks/earthquake.bif")
+model = reader.get_model()
 
-# Load iris dataset
-iris = load_iris(as_frame=True)
-df = iris.frame
+sampler = BayesianModelSampling(model)
+W = sampler.forward_sample(size=1000)
+W.columns = list(range(1,W.shape[1] + 1))
+W.replace({'False': 0, 'True': 1}, inplace=True)
 
-# Discretize continuous variables into 5 bins
-disc = KBinsDiscretizer(n_bins=5, encode='ordinal', strategy='quantile')
-df_discrete = df.copy()
-df_discrete[df.columns[:-1]] = disc.fit_transform(df[df.columns[:-1]])
-
-# Rename column names to feature index
-df_discrete.columns = list(range(1, df_discrete.shape[1])) + ['target']
-
-print(df_discrete.head(20))
 
 """Helper functions"""
 def ct(W: pd.DataFrame) -> pd.DataFrame:
-    """
-    Generates a contingency table from the data W.
-    Returns a DataFrame where the index are value combinations and
-    the column 'count' holds frequencies.
-    """
+    """Generates a contingency table from the data W."""
     counts = W.value_counts().reset_index()
     counts.columns = list(W.columns) + ["counts"]
     return counts
 
 
-W = df_discrete.drop("target", axis=1)
-full_ct = ct(W)
-print(full_ct.head(20))
-
 def vars(ct: pd.DataFrame) -> list:
     """Returns the set of variables in the contingency table ct"""
     return ct.columns.drop('counts').tolist()
 
-
-
-variables = vars(full_ct)
-print(variables)
 
 def ct2ct(ct:pd.DataFrame, v:int)-> pd.DataFrame:
     """Produces a contigency table by marginalizing the variable v out of ct"""
@@ -57,8 +42,6 @@ def ct2ct(ct:pd.DataFrame, v:int)-> pd.DataFrame:
     out = ct.groupby(keep_cols, as_index=False, sort=False)["counts"].sum()
     return out
 
-marginalized = ct2ct(full_ct, 1)
-print(marginalized.head(5))
 
 def ct2cft(ct:pd.DataFrame, v:int)->pd.DataFrame:
     """Yields a conditional frequency table"""
@@ -66,16 +49,14 @@ def ct2cft(ct:pd.DataFrame, v:int)->pd.DataFrame:
     return ct.groupby(parent_cols + [v], as_index=False, sort=False)['counts'].sum()
 
 
-cft = ct2cft(full_ct, 1)
-print(cft.head(10))
-
+scoring_method = BIC(W)
 def score(cft):
     """Calculates the local score based on the conditional frequency table"""
     pass
 
 
 """Main functions"""
-LS = np.array()
+LS = defaultdict(dict)
 def get_local_scores(ct:pd.DataFrame, evars:List[int]):
     """The main procedure, GetLocalScores, (Algorithm 1)
     is called with a contingency table ct and the variables
@@ -85,7 +66,8 @@ def get_local_scores(ct:pd.DataFrame, evars:List[int]):
     a depth first traversal of smaller and smaller contingency tables."""
     vars_ct = vars(ct)
     for v in vars_ct:
-        LS[v][vars_ct.remove(v)] = score(ct2cft(ct, v))
+        parents = vars_ct.remove(v)
+        LS[v][frozenset(parents)] =scoring_method.local_score_fr(node=v, parents=parents)#score(ct2cft(ct, v))
 
     # Recursively call get_local_scores
     if len(vars_ct) > 1:
