@@ -15,40 +15,8 @@ from pgmpy.sampling import BayesianModelSampling
 from pgmpy.estimators import BIC
 from pygobnilp.gobnilp import read_local_scores
 
-"""Helper functions"""
-def ct(W: pd.DataFrame) -> pd.DataFrame:
-    """Generates a contingency table from the data W."""
-    counts = W.value_counts().reset_index()
-    counts.columns = list(W.columns) + ["counts"]
-    return counts
 
 
-def vars(ct: pd.DataFrame) -> list:
-    """Returns the set of variables in the contingency table ct"""
-    return ct.columns.drop('counts').tolist()
-
-
-def ct2ct(ct:pd.DataFrame, v:int)-> pd.DataFrame:
-    """Produces a contigency table by marginalizing the variable v out of ct"""
-    return NotImplementedError
-
-
-def ct2cft(ct:pd.DataFrame, v:int)->pd.DataFrame:
-    """Yields a conditional frequency table"""
-    return NotImplementedError
-
-
-def score(cft):
-    """Calculates the local score based on the conditional frequency table"""
-    return NotImplementedError
-
-
-"""MAIN FUNCTIONS"""
-
-#  LS is a mapping from (variable, parent set)-pairs to corresponding local scores
-LS: Dict[str, Dict[FrozenSet, float]] = {}
-
-# Step 1: Compute local scores for all (variable, parent set)-pairs
 def get_local_scores(ct:pd.DataFrame, evars:List[int]):
     """The main procedure, GetLocalScores, (Algorithm 1) is called with a contingency table ct 
     and the variables evars to be marginalized from it. Initially, it is called with a contingency 
@@ -213,13 +181,6 @@ def ord_2_net(V:List[str], order:List[str], bps:Dict[str, Dict[FrozenSet[str], F
 
 
 # Step 1: Compute local scores for all (variable, parent set)-pairs
-
-# Initially call algorithm 1 with the ct for all variables and the whole variable set V as evars
-#V = data.columns
-# ct_full = ct(data)
-# get_local_scores(ct_full, V)
-
-# We use the local scores read from file instead of computing them from data
 LS = read_local_scores("local_scores/local_scores_asia_10000.jaa")
 V = list(LS.keys())
 
