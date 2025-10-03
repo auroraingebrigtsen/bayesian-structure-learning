@@ -4,15 +4,8 @@ Silander, T. and Myllymaki, P., 2012. A simple approach for finding the globally
 arXiv preprint arXiv:1206.6875.
 """
 
-import pandas as pd
-import numpy as np
-import pandas as pd
 from itertools import combinations
 from typing import List, Dict, Tuple, FrozenSet, Any, Iterable, Optional
-from collections import defaultdict
-from pgmpy.readwrite import BIFReader
-from pgmpy.sampling import BayesianModelSampling
-from pgmpy.estimators import BIC
 from pygobnilp.gobnilp import read_local_scores
 
 
