@@ -2,6 +2,17 @@
 
 Implementations of different BN structure learning algorithms.
 
+## Getting Started
+The project requires that you have [`uv`](https://docs.astral.sh/uv/) installed.
+
+Create a virtual environment and install requirements:
+
+```bash
+uv sync --all-extras --all-packages --all-groups
+source .venv/bin/activate
+```
+
+
 ## Project Structure
 
 This project **does not** implement score computation directly — instead we rely on [`pygobnilp`](https://bitbucket.org/jamescussens/pygobnilp/src/master/) to calculate local scores.

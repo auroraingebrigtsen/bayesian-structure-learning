@@ -135,48 +135,53 @@ def ord_2_net(V:List[str], order:List[str], bps:Dict[str, Dict[FrozenSet[str], F
     returns: List of parent sets, where parents[i] is the parent set for order[i]
     """
     parents: List[Set[str]] = [set() for _ in range(len(V))]  # Each entry is the parents of order[i]
-    predecs: FrozenSet[str] = frozenset()
+    predecs = set()  # Variables that come before the current variable in the order
 
-    for i in range(len(V)):
-        child = order[i]
+    # We iterate over the variables in the order, the first one has no predecessors
+    for i, child in enumerate(order):
 
-        # infer valid candidate parents for this child from bps keys
-        # (union of all parent names that ever appear as keys for this child)
-        child_cands = set().union(*bps[child].keys()) 
+        # find all parents that appear in candidate sets for the current variable
+        supported_parents = set().union(*bps[child].keys())
 
-        # only predecessors that are valid candidates for this child
-        C = predecs & child_cands
+        # only keep predecessors that can be parents of child
+        possible_parents = predecs & supported_parents
 
-        # look up best parent set for 'child' restricted to C
-        best_pars = bps[child][frozenset(C)]           # value is a frozenset of names
+        # find the best parents from the possible predecessors
+        parents[i] = bps[child][frozenset(possible_parents)] 
 
-        parents[i] = set(best_pars)                    # store as a mutable set (optional)
-        predecs = predecs | frozenset({child})
+        # add current variable to predecessors, this one must come before all next ones
+        predecs.add(child) 
 
     return parents
 
 
-# Step 1: Compute local scores for all (variable, parent set)-pairs
-LS = read_local_scores("local_scores/local_scores_asia_10000.jaa")
-V = list(LS.keys())
 
-print("Variables:", V)
+def get_optimal_network(path:str):
+    """Compute the optimal network using the Silander-Myllymaki algorithm."""
+    
+    # Step 1: Compute local scores for all (variable, parent set)-pairs
+    LS = read_local_scores(path)
+    V = list(LS.keys())
 
-#  Step 2: For each variable, find the best parent set and its score
-bps_all: Dict[str, Dict[FrozenSet[str], FrozenSet[str]]] = {}
-for v in V:
-    bps_all[v] = get_best_parents(V, v, LS)
+    print("Variables:", V)
 
-# Step 3: Find the best sink for each subset of variables, and the best total score
-sinks = get_best_sinks(V, bps_all, LS)
+    #  Step 2: For each variable, find the best parent set and its score
+    bps_all: Dict[str, Dict[FrozenSet[str], FrozenSet[str]]] = {}
+    for v in V:
+        bps_all[v] = get_best_parents(V, v, LS)
 
-# Step 4: Extract the optimal order from the best sinks
-order = sinks_2_ord(V, sinks)
-print("Optimal order:", order)
+    # Step 3: Find the best sink for each subset of variables, and the best total score
+    sinks = get_best_sinks(V, bps_all, LS)
 
-# Step 5: Extract the optimal network from the optimal order
-network = ord_2_net(V, order, bps_all)
-print("Optimal network (parents for each variable):")
-for i in range(len(V)):
-    print(f"  {order[i]}: {network[i]}")
+    # Step 4: Extract the optimal order from the best sinks
+    order = sinks_2_ord(V, sinks)
+    print("Optimal order:", order)
 
+    # Step 5: Extract the optimal network from the optimal order
+    network = ord_2_net(V, order, bps_all)
+    print("Optimal network (parents for each variable):")
+    for i in range(len(V)):
+        print(f"  {order[i]}: {network[i]}")
+
+
+get_optimal_network("local_scores/local_scores_asia_10000.jaa")
