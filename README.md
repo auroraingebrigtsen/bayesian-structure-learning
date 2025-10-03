@@ -4,7 +4,7 @@ Implementations of different BN structure learning algorithms.
 
 ## Project Structure
 
-This project **does not** implement score computation directly — instead we rely on [`pygobnilp`](https://github.com/fkowalski/pygobnilp) to calculate local scores.
+This project **does not** implement score computation directly — instead we rely on [`pygobnilp`](https://bitbucket.org/jamescussens/pygobnilp/src/master/) to calculate local scores.
 
 ### Data and Scores
 - We use the example datasets provided by `pygobnilp`, available in the folder: `pygobnilp/data/`
