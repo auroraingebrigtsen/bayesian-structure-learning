@@ -9,66 +9,38 @@ from typing import List, Dict, Tuple, FrozenSet, Any, Iterable, Optional
 from pygobnilp.gobnilp import read_local_scores
 
 
-
-def get_local_scores(ct:pd.DataFrame, evars:List[int]):
-    """The main procedure, GetLocalScores, (Algorithm 1) is called with a contingency table ct 
-    and the variables evars to be marginalized from it. Initially, it is called with a contingency 
-    table for all the variables and the whole variable set V as evars. The algorithm is simply
-    a depth first traversal of smaller and smaller contingency tables."""
-    vars_ct = vars(ct)
-    for v in vars_ct:
-        parents = vars_ct.remove(v)
-        LS[v][frozenset(parents)] = score(ct2cft(ct, v))
-
-    # Recursively call get_local_scores
-    if len(vars_ct) > 1: # Until only one variable remains
-        for v in evars:
-            get_local_scores(ct2ct(ct,v), [range(1, v-1)])
-
-# Step 2: For each variable, find the best parent set and its score
-
 def get_best_parents(V:List[str], v:str, LS:Dict[str, Dict[FrozenSet[str], float]]):
-    """Having calculated the local scores, finding the best
-    parents for a variable v from a set C can be done recursively. The best parents in C for v are either the whole
-    candidate set C itself or the best parents for v from
-    one of the smaller candidate sets {C \ {c} | c ∈ C}."""
+    """Implementation of algorithm 2: GetBestParents"
+    
+    V: List of all variable names
+    v: The variable for which we want to find the best parents
+    LS: Local scores, a map from variable name to scores for parent sets (may be pruned)
+    returns: A map from candidate parent sets to the best parents from that set for v
+    """
 
     # DP tables
     bps: Dict[FrozenSet[str], FrozenSet[str]] = {} # A map from a candidate set C to a subset of C that is the best parents for v from C
     bss: Dict[FrozenSet[str], float] = {} # A map from a candidate set C to the score of the best parents for v from C
 
-    # To avoid blow-up we only consider parents that appear in LS, if we use no pruning for LS then this is the full set of variables
+    # We only need to consider variables that appear in the local scores for v
     supp_v = set()
-    for U in LS[v].keys():        # U is a frozenset
-        supp_v.update(U)
-
-    print("candidates for", v, ":", supp_v)
+    for ps in LS[v].keys():  # parent sets that have a defined score for v
+        supp_v.update(ps)
 
     candidates = tuple(sorted(supp_v))  # so subsets come in lexicographic order
 
-    def score(C: FrozenSet[str]) -> float:
-        return LS[v].get(C, float("-inf"))
-
     # Base case
     bps[frozenset()] = frozenset()
-    bss[frozenset()] = score(frozenset())
+    bss[frozenset()] = LS[v].get(frozenset(), float("-inf"))
 
-    # Iterate over all subsets of cand 
-    # {}         -> 000
-    # {A}        -> 100
-    # {B}        -> 010
-    # {A,B}      -> 110
-    # {C}        -> 001
-    # {A,C}      -> 101
-    # {B,C}      -> 011
-    # {A,B,C}    -> 111
+    # Iterate over all candidate sets in lexicographic order 
     for r in range(1, len(candidates) + 1): # size of the candidate set
         for cs in combinations(candidates, r): # all candidate sets of size r
             C = frozenset(cs)
 
             # Option 1: take C itself
             best_set = C
-            best_score = score(C)
+            best_score = LS[v].get(C, float('-inf'))
 
             # Option 2: best of proper subsets by removing one element
             for c in C:
@@ -91,6 +63,10 @@ def get_best_sinks(
     LS: Dict[str, Dict[FrozenSet[str], float]]):
     """
     Implementes algorithm 3: GetBestSinks
+    V: List of all variable names
+    bps: Map from variable name to map from candidate parent sets to best parents from that set
+    LS: Local scores, a map from variable name to scores for parent sets (may be pruned)
+    returns: A map from variable subsets to their best sink (str)
     """
 
     V = tuple(sorted(V))  # so subsets come in lexicographic order
@@ -122,11 +98,6 @@ def get_best_sinks(
 
                 parents =  bps[sink].get(upvars_v, frozenset()) 
                 total = scores[upvars] + LS[sink].get(parents, float('-inf'))
-                print("\n\n\nDEBUG:")
-                print("PARENTS:", parents   )
-                print("SCORE:", LS[sink].get(parents, float('-inf')))
-                print("SCORES[UPVARS]:", scores[upvars])
-                print("TOTAL:", total)
 
     
                 # if total > scores[W] then update
@@ -139,19 +110,31 @@ def get_best_sinks(
             
     return sinks
 
-def sinks_2_ord(V: List[str], sinks: Dict[FrozenSet[str], str]) -> Dict[str, int]:
-    """Implementation of algoritm 4: Sinks2Ord"""
+def sinks_2_ord(V: List[str], sinks: Dict[FrozenSet[str], str]) -> List[str]:
+    """Implementation of algoritm 4: Sinks2Ord
+    
+    V: List of all variable names
+    sinks: Map from variable subsets to their best sink
+    returns: List of variable names in an optimal order
+    """
     order = [None] * len(V)
     left = set(V)
+
+    # iterate backwards over the order
     for i in reversed(range(len(V))):
-        order[i] = sinks[frozenset(left)]
+        order[i] = sinks[frozenset(left)]  # best sink of the remaining variables
         left.remove(order[i])
     return order
 
 def ord_2_net(V:List[str], order:List[str], bps:Dict[str, Dict[FrozenSet[str], FrozenSet[str]]]):
-    """Implementation of algorithm 5: Ord2Net"""
-    # parents[i] corresponds to order[i]
-    parents: List[Set[str]] = [set() for _ in range(len(V))]  # This is the graph to be returned
+    """Implementation of algorithm 5: Ord2Net
+    
+    V: List of all variable names
+    order: List of variable names in an optimal order
+    bps: Map from variable name to map from candidate parent sets to best parents from that
+    returns: List of parent sets, where parents[i] is the parent set for order[i]
+    """
+    parents: List[Set[str]] = [set() for _ in range(len(V))]  # Each entry is the parents of order[i]
     predecs: FrozenSet[str] = frozenset()
 
     for i in range(len(V)):
@@ -195,17 +178,5 @@ print("Optimal order:", order)
 network = ord_2_net(V, order, bps_all)
 print("Optimal network (parents for each variable):")
 for i in range(len(V)):
-    print(f"  {V[i]}: {network[i]}")
+    print(f"  {order[i]}: {network[i]}")
 
-
-# Test: Does pygobnilp agree on the score of the optimal network?
-from pygobnilp.gobnilp import Gobnilp
-g = Gobnilp()
-g.learn(
-    data_source="pygobnilp/data/asia_10000.dat",
-    data_type="discrete",
-    score="DiscreteBIC",
-    palim=10, # parent limit
-)
-
-print(g.learned_bn)
