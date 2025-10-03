@@ -8,7 +8,7 @@ import pandas as pd
 import numpy as np
 import pandas as pd
 from itertools import combinations
-from typing import List, Dict, Tuple
+from typing import List, Dict, Tuple, FrozenSet, Any, Iterable, Optional
 from collections import defaultdict
 from pgmpy.readwrite import BIFReader
 from pgmpy.sampling import BayesianModelSampling
@@ -46,7 +46,7 @@ def score(cft):
 """MAIN FUNCTIONS"""
 
 #  LS is a mapping from (variable, parent set)-pairs to corresponding local scores
-LS: Dict[Tuple[str, frozenset], float] = {}
+LS: Dict[str, Dict[FrozenSet, float]] = {}
 
 # Step 1: Compute local scores for all (variable, parent set)-pairs
 def get_local_scores(ct:pd.DataFrame, evars:List[int]):
@@ -64,72 +64,160 @@ def get_local_scores(ct:pd.DataFrame, evars:List[int]):
         for v in evars:
             get_local_scores(ct2ct(ct,v), [range(1, v-1)])
 
-def get_local_scores_from_file(file_path: str):
-    """Reads local scores from a file and populates the LS dictionary.
-    Alternative to computing local scores using data."""
-    scores = read_local_scores(file_path)
-    return scores
-
 # Step 2: For each variable, find the best parent set and its score
 
-def get_best_parents(V:set, v:str, LS:Dict[Tuple[str, frozenset], float]):
+def get_best_parents(V:List[str], v:str, LS:Dict[str, Dict[FrozenSet[str], float]]):
     """Having calculated the local scores, finding the best
     parents for a variable v from a set C can be done recursively. The best parents in C for v are either the whole
     candidate set C itself or the best parents for v from
     one of the smaller candidate sets {C \ {c} | c ∈ C}."""
 
-    # bps/bss indexed by frozenset of parents
-    bps: Dict[FrozenSet[Any], FrozenSet[Any]] = {} # A map from a candidate set C to a subset of C that is the best parents for v from C
-    bss: Dict[FrozenSet[Any], float] = {} # A map from a candidate set C to the score of the best parents for v from C
+    V = tuple(sorted(V))  # ensures lexicographic subset order
+    # DP tables
+    bps: Dict[FrozenSet[str], FrozenSet[str]] = {} # A map from a candidate set C to a subset of C that is the best parents for v from C
+    bss: Dict[FrozenSet[str], float] = {} # A map from a candidate set C to the score of the best parents for v from C
 
-    cand = [x for x in V if x != v]
+    # To avoid blow-up we only consider parents that appear in LS, if we use no pruning for LS then this is the full set of variables
+    possible_parents = LS.get(v, set())
+    if not possible_parents:
+        return {}
+
+    candidates = set()
+    for css, score in possible_parents.items():
+        for cs in css:
+            candidates.add(cs)
+
+    print("candidates for", v, ":", candidates)
+
+    def score(C: FrozenSet[str]) -> float:
+        return LS[v].get(C, float("-inf"))
+
+    # Base case
+    bps[frozenset()] = frozenset()
+    bss[frozenset()] = score(frozenset())
 
     # Iterate over all subsets of cand 
-    # Ex. {}, {0}, {1}, {0,1}, {2}, {0,2}, {1,2}, {0,1,2}
-    for r in range(len(cand)+1):
-        for cs in combinations(cand, r):
-            fr_cs = frozenset(cs)
-            bps[fr_cs] = fr_cs
-            bss[fr_cs] = LS.get((v, fr_cs), float('-inf')) # set -inf if this value is not in LS
-            for c in cs:
-                c1 = fr_cs - {c}
-                if bss[c1] > bss[fr_cs]:
-                    bss[fr_cs] = bss[c1]
-                    bps[fr_cs] = bps[c1]
+    # {}         -> 000
+    # {A}        -> 100
+    # {B}        -> 010
+    # {A,B}      -> 110
+    # {C}        -> 001
+    # {A,C}      -> 101
+    # {B,C}      -> 011
+    # {A,B,C}    -> 111
+    for r in range(1, len(candidates) + 1): # size of the candidate set
+        for cs in combinations(candidates, r): # all candidate sets of size r
+            C = frozenset(cs)
+
+            # Option 1: take C itself
+            best_set = C
+            best_score = score(C)
+
+            # Option 2: best of proper subsets by removing one element
+            for c in C:
+                c1 = C - {c}
+                # c1 already computed because we go size-increasing
+                if bss[c1] > best_score:
+
+                    best_score = bss[c1]
+                    best_set = bps[c1]
+
+            bps[C] = best_set
+            bss[C] = best_score
 
     return bps
 
 
-def get_best_sinks(V, bps, LS):
-    pass
+def get_best_sinks(
+    V: Iterable[str], 
+    bps: Dict[str, Dict[FrozenSet[str], FrozenSet[str]]],
+    LS: Dict[str, Dict[FrozenSet[str], float]]):
+    """
+    Implementes algorithm 3: GetBestSinks
+    """
 
-def sinks_2_ord(V, sinks):
-    pass
+    V = tuple(sorted(V))  # so subsets come in lexicographic order
+    sinks: Dict[FrozenSet[str], str] = {}
+    scores: Dict[FrozenSet[str], float] = {}
 
-def ord_2_net(V, ord, bps):
-    pass
+    # Base case
+    scores[frozenset()] = 0.0
+    sinks[frozenset()]  = -1  # no sink
+
+    # process subsets in size-then-lex order
+    for r in range(0, len(V) + 1):
+        for w in combinations(V, r):
+            W = frozenset(w)
+
+            scores[W] = 0.0
+            sinks[W]  = -1  # no sink
+
+            # for all sink ∈ W
+            for sink in W:
+                # since we did pruning when computing LS, we may have a sink that has no entry in LS or bps
+                if sink not in bps or sink not in LS:
+                    continue
+
+                upvars  = W - {sink}  # W \ {sink}
+               #parents = bps[sink][upvars]  # best parents for 'sink' from 'upvars'
+                bps_sink = bps[sink]
+                parents = bps_sink.get(upvars, frozenset())
+                total = scores[upvars] + LS[sink].get(parents, float('-inf'))
+    
+                # if total > scores[W] then update
+                if total > scores[W]:
+                    scores[W] = total
+                    sinks[W]  = sink
+            
+
+
+    return sinks
+
+def sinks_2_ord(V: List[str], sinks: Dict[FrozenSet[str], str]) -> Dict[str, int]:
+    """Implementation of algoritm 4: Sinks2Ord"""
+    order = np.zeros(len(V), dtype=str)
+    left = set(V)
+    for i in reversed(range(len(V))):
+        order[i] = sinks[frozenset(left)]
+        left.remove(order[i])
+    return order
+
+def ord_2_net(V:List[str], order:np.array, bps:Dict[str, Dict[FrozenSet[str], FrozenSet[str]]]):
+    parents = np.zeros((len(V),), dtype=FrozenSet)
+    predecs = set() # predecessors in the order
+    for i in range(1, len(V) + 1):
+        parents[i] = bps[order[i]][frozenset(predecs)]
+        predecs.add(order[i])
+    return parents
 
 
 # Initially call algorithm 1 with the ct for all variables and the whole variable set V as evars
-# V = list(range(data.shape[1]))
+#V = data.columns
 # ct_full = ct(data)
 # get_local_scores(ct_full, V)
 
 # We use the local scores read from file instead of computing them from data
-LS = get_local_scores_from_file("local_scores/local_scores_alarm_100.jaa")
+LS = read_local_scores("local_scores/local_scores_alarm_100.jaa")
+V = list(LS.keys())
+
+print("V:", V)
 print(LS)
-
-bps = get_best_parents(range(5), 0, LS)
 print("\n\n")
-print(bps)
 
-# bps_choice, bps_score = get_best_parents(V, LS)
-# sink_star, S = get_best_sinks(V, bps_score)
-# order = sinks_2_ord(V, sink_star)
+# For each variable, find the best parent set
+bps_all: Dict[str, Dict[FrozenSet[str], FrozenSet[str]]] = {}
+for v in V:
+    bps_all[v] = get_best_parents(V, v, LS)
 
-# parents, edges = ord_2_net(V, order, bps_choice)
+# Step 3: Find the best sink for each subset of variables, and the best total score
+sinks = get_best_sinks(V, bps_all, LS)
 
-# print("Optimal order:", order)
-# print("Edges:", sorted(edges))
-# print("Parents:", {v: sorted(list(U)) for v, U in parents.items()})
-# print("Best total score:", S[frozenset(V)])
+# Step 4: Extract the optimal order from the best sinks
+order = sinks_2_ord(V, sinks)
+print("Optimal order:", order)
+
+# Step 5: Extract the optimal network from the optimal order
+network = ord_2_net(V, order, bps_all)
+print("Optimal network (parents for each variable):")
+for i in range(len(V)):
+    print(f"  {V[i]}: {network[i]}")

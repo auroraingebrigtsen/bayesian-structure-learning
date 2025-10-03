@@ -216,3 +216,6 @@ __marimo__/
 *.exe
 .vs/
 .vscode/
+
+# Bayesian Structure Learning
+/local_scores
