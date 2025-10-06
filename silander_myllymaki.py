@@ -71,13 +71,8 @@ def get_best_sinks(
 
     V = tuple(sorted(V))  # so subsets come in lexicographic order
 
-    # Since the local scores may be pruned, we need to find the supported sets for each variable
-    support: Dict[str, set] = {} # map from variable to the set of variables that appear in its local scores
-    for child, cs in bps.items():  # variable, {parent set: best parents}
-        possible_parents = set()
-        for parents in cs.keys():
-            possible_parents.update(parents) # add all variables that appear in any parent set
-        support[child] = possible_parents
+    # map: child -> set of variables that ever appear in a parent set for that child
+    support = {child: {p for U in bmap.keys() for p in U} for child, bmap in bps.items()}
 
     sinks = {frozenset(): None}
     scores = {frozenset(): 0.0}
@@ -141,7 +136,7 @@ def ord_2_net(V:List[str], order:List[str], bps:Dict[str, Dict[FrozenSet[str], F
     for i, child in enumerate(order):
 
         # find all parents that appear in candidate sets for the current variable
-        supported_parents = set().union(*bps[child].keys())
+        supported_parents = {p for U in bps[child].keys() for p in U}
 
         # only keep predecessors that can be parents of child
         possible_parents = predecs & supported_parents
