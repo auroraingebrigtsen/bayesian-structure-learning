@@ -5,14 +5,14 @@ arXiv preprint arXiv:1206.6875.
 """
 
 from itertools import combinations
-from typing import List, Dict, Tuple, FrozenSet, Any, Iterable, Optional
+from typing import List, Dict, Tuple, FrozenSet, Any, Iterable, Optional, Set
 from pygobnilp.gobnilp import read_local_scores
 
 
 def get_best_parents(
     V:List[str], 
     v:str, 
-    LS:Dict[str, Dict[FrozenSet[str], float]]):
+    LS:Dict[str, Dict[FrozenSet[str], float]])-> Dict[FrozenSet[str], FrozenSet[str]]:
     """
     Implements algorithm 2: GetBestParents
     
@@ -30,8 +30,6 @@ def get_best_parents(
     supp_v = set()
     for ps in LS[v].keys():  # parent sets that have a defined score for v
         supp_v.update(ps)
-
-    candidates = tuple(sorted(supp_v))  # so subsets come in lexicographic order
 
     # Base case
     bps[frozenset()] = frozenset()
@@ -64,7 +62,7 @@ def get_best_parents(
 def get_best_sinks(
     V: Iterable[str], 
     bps: Dict[str, Dict[FrozenSet[str], FrozenSet[str]]],
-    LS: Dict[str, Dict[FrozenSet[str], float]]):
+    LS: Dict[str, Dict[FrozenSet[str], float]]) -> Dict[FrozenSet[str], str]:
     """
     Implements algorithm 3: GetBestSinks
 
@@ -73,8 +71,6 @@ def get_best_sinks(
     LS: Local scores, a map from variable name to scores for parent sets (may be pruned)
     returns: A map from variable subsets to their best sink (str)
     """
-
-    V = tuple(sorted(V))  # so subsets come in lexicographic order
 
     # map: child -> set of variables that ever appear in a parent set for that child
     support = {child: {p for U in bmap.keys() for p in U} for child, bmap in bps.items()}
@@ -99,7 +95,6 @@ def get_best_sinks(
                 parents =  bps[sink].get(upvars_v, frozenset()) 
                 total = scores[upvars] + LS[sink].get(parents, float('-inf'))
 
-    
                 # if total > scores[W] then update
                 if total > best_score:
                     best_score = total
@@ -163,7 +158,7 @@ def ord_2_net(
 
 
 
-def get_optimal_network(path:str):
+def get_optimal_network(path:str) -> Dict[str, Set[str]]:
     """Compute the optimal network using the Silander-Myllymaki algorithm."""
     
     # Step 1: Compute local scores for all (variable, parent set)-pairs
