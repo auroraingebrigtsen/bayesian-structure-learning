@@ -173,10 +173,17 @@ def get_optimal_network(path:str):
     print("Optimal order:", order)
 
     # Step 5: Extract the optimal network from the optimal order
-    network = ord_2_net(V, order, bps_all)
-    print("Optimal network (parents for each variable):")
-    for i in range(len(V)):
-        print(f"  {order[i]}: {network[i]}")
+    parents = ord_2_net(V, order, bps_all) # List of parent sets, where parents[i] is the parent set for order[i]
+    
+    # Store the result in a dictionary
+    parent_dict = {}
 
+    for var, ps in zip(order, parents):
+        parent_dict[var] = ps
+    
+    for var, ps in parent_dict.items():
+        print(f"{var}: {sorted(ps)}")
 
-get_optimal_network("local_scores/local_scores_asia_10000.jaa")
+    return parent_dict
+
+network = get_optimal_network("local_scores/local_scores_asia_10000.jaa")

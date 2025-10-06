@@ -434,7 +434,7 @@ class BN(nx.DiGraph):
         Returns:
          numpy.matrix: The adjacency matrix
         '''
-        return nx.to_numpy_matrix(self)
+        return nx.to_numpy_array(self)
     
     def compute_compelled(self,compelled=()):
         '''Determines which directed edges are present in all DAGs Markov equivalent
