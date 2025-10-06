@@ -9,8 +9,12 @@ from typing import List, Dict, Tuple, FrozenSet, Any, Iterable, Optional
 from pygobnilp.gobnilp import read_local_scores
 
 
-def get_best_parents(V:List[str], v:str, LS:Dict[str, Dict[FrozenSet[str], float]]):
-    """Implementation of algorithm 2: GetBestParents"
+def get_best_parents(
+    V:List[str], 
+    v:str, 
+    LS:Dict[str, Dict[FrozenSet[str], float]]):
+    """
+    Implements algorithm 2: GetBestParents
     
     V: List of all variable names
     v: The variable for which we want to find the best parents
@@ -62,7 +66,8 @@ def get_best_sinks(
     bps: Dict[str, Dict[FrozenSet[str], FrozenSet[str]]],
     LS: Dict[str, Dict[FrozenSet[str], float]]):
     """
-    Implementes algorithm 3: GetBestSinks
+    Implements algorithm 3: GetBestSinks
+
     V: List of all variable names
     bps: Map from variable name to map from candidate parent sets to best parents from that set
     LS: Local scores, a map from variable name to scores for parent sets (may be pruned)
@@ -105,9 +110,12 @@ def get_best_sinks(
             
     return sinks
 
-def sinks_2_ord(V: List[str], sinks: Dict[FrozenSet[str], str]) -> List[str]:
-    """Implementation of algoritm 4: Sinks2Ord
-    
+def sinks_2_ord(
+    V: List[str], 
+    sinks: Dict[FrozenSet[str], str]) -> List[str]:
+    """
+    Implements algorithm 4: Sinks2Ord
+
     V: List of all variable names
     sinks: Map from variable subsets to their best sink
     returns: List of variable names in an optimal order
@@ -121,8 +129,12 @@ def sinks_2_ord(V: List[str], sinks: Dict[FrozenSet[str], str]) -> List[str]:
         left.remove(order[i])
     return order
 
-def ord_2_net(V:List[str], order:List[str], bps:Dict[str, Dict[FrozenSet[str], FrozenSet[str]]]):
-    """Implementation of algorithm 5: Ord2Net
+def ord_2_net(
+    V:List[str], 
+    order:List[str], 
+    bps:Dict[str, Dict[FrozenSet[str], FrozenSet[str]]]) -> List[Set[str]]:
+    """
+    Implements algorithm 5: Ord2Net
     
     V: List of all variable names
     order: List of variable names in an optimal order
