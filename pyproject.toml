@@ -5,6 +5,7 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "bnlearn>=0.10.2",
     "graphviz>=0.21",
     "gurobipy==11.0.3",
     "numba>=0.62.0",

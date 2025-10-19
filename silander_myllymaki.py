@@ -36,8 +36,8 @@ def get_best_parents(
     bss[frozenset()] = LS[v].get(frozenset(), float("-inf"))
 
     # Iterate over all candidate sets in lexicographic order 
-    for r in range(1, len(candidates) + 1): # size of the candidate set
-        for cs in combinations(candidates, r): # all candidate sets of size r
+    for r in range(1, len(supp_v) + 1): # size of the candidate set
+        for cs in combinations(supp_v, r): # all candidate sets of size r
             C = frozenset(cs)
 
             # Option 1: take C itself
@@ -166,6 +166,7 @@ def get_optimal_network(path:str) -> Dict[str, Set[str]]:
     V = list(LS.keys())
 
     print("Variables:", V)
+    print("Number of variables:", len(V))
 
     #  Step 2: For each variable, find the best parent set and its score
     bps_all: Dict[str, Dict[FrozenSet[str], FrozenSet[str]]] = {}
@@ -192,5 +193,3 @@ def get_optimal_network(path:str) -> Dict[str, Set[str]]:
         print(f"{var}: {sorted(ps)}")
 
     return parent_dict
-
-network = get_optimal_network("local_scores/local_scores_asia_10000.jaa")

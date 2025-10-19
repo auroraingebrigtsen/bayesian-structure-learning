@@ -8,27 +8,32 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from silander_myllymaki import get_optimal_network
+from write_local_scores import write_local_scores
 
 from pygobnilp.gobnilp import Gobnilp
 import pygobnilp  # for robust data path
 
-# Robust paths
-ASIA_DAT =  "pygobnilp/data/asia_10000.dat"
-LOCAL_SCORES =  "local_scores/local_scores_asia_10000.jaa"
+DATASETS = [
+    #("pygobnilp/data/asia_10000.dat", "local_scores/local_scores_asia_10000.jaa"),
+    ("pygobnilp/data/alarm_100.dat", "local_scores/local_scores_alarm_100.jaa"),
+    #("pygobnilp/data/alarm_10000.dat", "local_scores/local_scores_alarm_10000.jaa"),
+]
 
 @pytest.mark.slow
-def test_edges_match_gobnilp_reference():
+@pytest.mark.parametrize("dat_path, local_scores_path", DATASETS)
+def test_edges_match_gobnilp_reference(dat_path, local_scores_path):
     """
     Compare the learned edge set to Gobnilp's own output on the same data.
     """
 
     # --- My implementation ---
-    cust_parents = get_optimal_network(path=str(LOCAL_SCORES))
+    write_local_scores(dat_path, local_scores_path)
+    cust_parents = get_optimal_network(path=str(local_scores_path))
 
     # --- Gobnilp reference ---
     g = Gobnilp()
     g.learn(
-        data_source=str(ASIA_DAT),
+        data_source=str(dat_path),
         data_type="discrete",
         score="DiscreteBIC",
     )
