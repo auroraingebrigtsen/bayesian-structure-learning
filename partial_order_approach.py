@@ -38,8 +38,6 @@ front_choices_per_block: List[List[Set[str]]] = [
     [set(F) for F in combinations(block, a)] for block in blocks
 ]
 
-
-
 def downward_closure(LS: Dict[str, Dict[FrozenSet[str], float]]
                     ) -> Dict[str, Set[FrozenSet[str]]]:
     """
@@ -71,11 +69,18 @@ def generate_partial_orders(
     """
     Generates all partial orders that you get by the two bucket scheme.
     """
-
-    per_block_pairs: List[List[Tuple[Set[str], Set[str]]]] = [
-        [(front, block - front) for front in fronts]
-        for block, fronts in zip(blocks, front_choices_per_block)
-    ]
+    per_block_pairs: List[List[Tuple[Set[str], Set[str]]]] = []
+    
+    # for each block and its possible fronts
+    for block, fronts in zip(blocks, front_choices_per_block):
+        pairs_for_block: List[Tuple[Set[str], Set[str]]] = []
+        
+        # for each possible choice of front in this block
+        for front in fronts:
+            back = block - front # the elements not in the front
+            pairs_for_block.append((front, back))
+    
+    per_block_pairs.append(pairs_for_block)
     for choice in product(*per_block_pairs):  # one (front, back) per block
         edges: Set[Edge] = set()
         for front, back in choice:
