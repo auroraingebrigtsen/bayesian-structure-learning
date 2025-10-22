@@ -26,18 +26,13 @@ def get_best_parents(
     bps: Dict[FrozenSet[str], FrozenSet[str]] = {} # A map from a candidate set C to a subset of C that is the best parents for v from C
     bss: Dict[FrozenSet[str], float] = {} # A map from a candidate set C to the score of the best parents for v from C
 
-    # We only need to consider variables that appear in the local scores for v
-    supp_v = set()
-    for ps in LS[v].keys():  # parent sets that have a defined score for v
-        supp_v.update(ps)
-
     # Base case
     bps[frozenset()] = frozenset()
     bss[frozenset()] = LS[v].get(frozenset(), float("-inf"))
 
-    # Iterate over all candidate sets in lexicographic order 
-    for r in range(1, len(supp_v) + 1): # size of the candidate set
-        for cs in combinations(supp_v, r): # all candidate sets of size r
+    # Iterate over all candidate sets in lexicographic order
+    for r in range(1, len(V) + 1): # size of the candidate set
+        for cs in combinations(V, r): # all candidate sets of size r
             C = frozenset(cs)
 
             # Option 1: take C itself
@@ -72,9 +67,6 @@ def get_best_sinks(
     returns: A map from variable subsets to their best sink (str)
     """
 
-    # map: child -> set of variables that ever appear in a parent set for that child
-    support = {child: {p for U in bmap.keys() for p in U} for child, bmap in bps.items()}
-
     sinks = {frozenset(): None}
     scores = {frozenset(): 0.0}
 
@@ -89,9 +81,7 @@ def get_best_sinks(
             # for all sink ∈ W
             for sink in W:
                 upvars  = W - {sink}  # W \ {sink}
-                # Only keep parents the child can actually have (per pruned LS)
-                upvars_v = frozenset(x for x in upvars if x in support.get(sink, set()))
-                parents =  bps[sink].get(upvars_v, frozenset()) 
+                parents =  bps[sink].get(upvars, frozenset())
 
                 # total = score(best parents from W\{sink}) + local score(sink, parents)
                 total = scores[upvars] + LS[sink].get(parents, float('-inf'))
