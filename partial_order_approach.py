@@ -21,8 +21,8 @@ print("Variables:", V)
 print("Number of variables:", n)
 
 # BUCKET ORDER SCHEME PARAMETERS
-m: int = 8  # size of each bucket order
-p: int = 1  # number of disjoint bucket orders
+m: int = 3  # size of each bucket order
+p: int = 2  # number of disjoint bucket orders
 assert p * m <= n
 assert m >= 2 and p >= 1
 
@@ -79,8 +79,8 @@ def generate_partial_orders(
         for front in fronts:
             back = block - front # the elements not in the front
             pairs_for_block.append((front, back))
-    
-    per_block_pairs.append(pairs_for_block)
+        per_block_pairs.append(pairs_for_block)
+
     for choice in product(*per_block_pairs):  # one (front, back) per block
         edges: Set[Edge] = set()
         for front, back in choice:
@@ -114,9 +114,9 @@ def get_ideals(M: Set[str], pred: Dict[str, Set[str]]) -> List[FrozenSet[str]]:
         if not available:
             continue
 
-        x = next(iter(available))
-        stack.append((included | {x}, remaining - {x}))  # including x
-        stack.append((included, remaining - {x}))  # excluding x
+        for x in sorted(available):
+            stack.append((included | {x}, remaining - {x}))  # include x
+            stack.append((included, remaining - {x})) # exclude x
 
     return sorted(ideals, key=lambda s: (len(s), sorted(s)))
 
@@ -196,7 +196,7 @@ def algorithm1(
 
         # find the best parents (local dynamic programming step)
         # For each variable v, find its best parent set within the current ideal 
-        tail_sets = get_tail(Ymax, set(Y))  # all subsets of Y that include every sink in Y
+        tail_sets = get_tail(Y, Ymax)  # all subsets of Y that include every sink in Y
         for v in M:
             best_bss = float('-inf')
             best_parents = None
@@ -222,7 +222,7 @@ def algorithm1(
             bps[v][Y] = best_parents if best_parents is not None else empty
 
     return ss[frozenset(M)], {
-        'po': po,
+        'P': P,
         'ideals': ideals,
         'ss': ss,
         'prev': prev,
@@ -235,14 +235,11 @@ def algorithm1(
 best_score = float('-inf')
 best_run = None
 
-for po in generate_partial_orders(blocks, front_choices_per_block):
-    score, run = algorithm1(M, po, LS, F_downclosed)
+for P in generate_partial_orders(blocks, front_choices_per_block):
+    score, run = algorithm1(M, P, LS, F_downclosed)
     if score > best_score:
         best_score = score
         best_run = run
-
-print("Best score:", best_score)
-print("Best partial order edges (po):", best_run['po'])
 
 def reconstruct_parent_map(
     V: List[str],
@@ -255,7 +252,7 @@ def reconstruct_parent_map(
     """
     Finds the parent set for each variable in the optimal network found by iterating Algorithm 1.
     """
-    parents: Dict[str, List[str]] = {v: [] for v in V}
+    parents: Dict[str, FrozenSet[str]] = {v: frozenset() for v in V}
 
     Y = frozenset(V)
     # Work backwards through ss/prev to get the sink order and chosen v’s
