@@ -81,6 +81,7 @@ def predecessors(M: Set[str], P: Set[Edge]) -> Dict[str, Set[str]]:
 def get_ideals(M: Set[str], pred: Dict[str, Set[str]]) -> List[FrozenSet[str]]:
     ideals: Set[FrozenSet[str]] = set()
     stack = [(frozenset(), frozenset(M))]  # (included, remaining)
+    seen = set()
 
     while stack:
         included, remaining = stack.pop()
@@ -181,13 +182,8 @@ def algorithm1(
             bps[v][Y] = best_parents if best_parents is not None else empty
 
     return ss[frozenset(M)], {
-        'P': P,
-        'ideals': ideals,
-        'ss': ss,
-        'prev': prev,
-        'bss': bss,
-        'bps': bps,
-    }
+        'P': P, 'ideals': ideals, 'ss': ss, 'prev': prev, 'bss': bss, 'bps': bps,
+}
 
 
 best_score = float('-inf')
