@@ -21,8 +21,8 @@ print("Variables:", V)
 print("Number of variables:", n)
 
 # BUCKET ORDER SCHEME PARAMETERS
-m: int = 4  # size of each bucket order
-p: int = 2  # number of disjoint bucket orders
+m: int = 8  # size of each bucket order
+p: int = 1  # number of disjoint bucket orders
 assert p * m <= n
 assert m >= 2 and p >= 1
 
@@ -70,7 +70,7 @@ def generate_partial_orders(
     Generates all partial orders that you get by the two bucket scheme.
     """
     per_block_pairs: List[List[Tuple[Set[str], Set[str]]]] = []
-    
+
     # for each block and its possible fronts
     for block, fronts in zip(blocks, front_choices_per_block):
         pairs_for_block: List[Tuple[Set[str], Set[str]]] = []
@@ -115,14 +115,12 @@ def get_ideals(M: Set[str], pred: Dict[str, Set[str]]) -> List[FrozenSet[str]]:
             continue
 
         x = next(iter(available))
-        # include x
-        stack.append((included | {x}, remaining - {x}))
-        # exclude x
-        stack.append((included, remaining - {x}))
+        stack.append((included | {x}, remaining - {x}))  # including x
+        stack.append((included, remaining - {x}))  # excluding x
 
     return sorted(ideals, key=lambda s: (len(s), sorted(s)))
 
-def maximal_in_Y(Y: FrozenSet[str], pred: Dict[str, Set[str]]) -> Set[str]:
+def get_maximal(Y: FrozenSet[str], pred: Dict[str, Set[str]]) -> Set[str]:
     """
     Function to get the maximal elements of Y ⊆ M w.r.t. the partial order defined by pred.
     The maximal elements are those that have no successors in Y.
@@ -135,14 +133,24 @@ def maximal_in_Y(Y: FrozenSet[str], pred: Dict[str, Set[str]]) -> Set[str]:
                 maxes.discard(u)
     return maxes
 
-def get_tail(A: Set[str], B: Set[str]) -> List[FrozenSet[str]]:
+def get_tail(Y: Set[str], Y_hat: Set[str]) -> List[FrozenSet[str]]:
     """
     Function to get the tail of a set Y.
     The tail is the interval [Y_hat, Y], which is all subsets of Y that contain all maximal elements of Y.
     """
-    diff = B - A
-    subsets = chain.from_iterable(combinations(diff, r) for r in range(len(diff) + 1))
-    return [frozenset(A | set(s)) for s in subsets]
+    tail_sets: List[FrozenSet[str]] = []
+
+    remaining = Y - Y_hat
+
+    # for every possible subset of the remaining elements
+    for r in range(len(remaining) + 1):
+        #  for all combinations of size r
+        for subset in combinations(remaining, r):
+            # combine Y_hat with this subset , since Y_hat must be included
+            new_set = frozenset(Y_hat.union(subset))
+            tail_sets.append(new_set)
+
+    return tail_sets
 
 def algorithm1(
     M: Set[str],
@@ -151,115 +159,129 @@ def algorithm1(
     F_downclosed: Dict[str, Set[FrozenSet[str]]]
 ):
     """
-    Implementation of Algorithm 1 from the paper.
+    Implementation of Algorithm 1.
     """
     pred = predecessors(M, P)
     ideals = get_ideals(M, pred)
 
-    fhat: Dict[Tuple[str, FrozenSet[str]], float] = {}
-    g: Dict[FrozenSet[str], float] = {frozenset(): 0.0}
-
-    g_bp: Dict[FrozenSet[str], Tuple[str, FrozenSet[str]]] = {}
-    fhat_bp: Dict[Tuple[str, FrozenSet[str]], Tuple[str, FrozenSet[str]]] = {}
+    bss: Dict[str, Dict[FrozenSet[str], float]] = {v: {} for v in M}  # best local score for v at ideal Y
+    bps: Dict[str, Dict[FrozenSet[str], FrozenSet[str]]] = {v: {} for v in M}  # chosen parent set for v at ideal Y
+    ss: Dict[FrozenSet[str], float] = {}  # best total score over DAGs on Y
+    prev: Dict[FrozenSet[str], FrozenSet[str]] = {}  # predecessor ideal that yields ss[Y] 
 
     empty = frozenset()
+    ss[empty] = 0.0
+    prev[empty] = empty
+
     for v in M:
-        fhat[(v, empty)] = LS[v].get(empty, float('-inf'))
+        bss[v][empty] = LS[v].get(empty, float('-inf'))
+        bps[v][empty] = empty
 
-    for Y in ideals[1:]:
-        Ymax = maximal_in_Y(Y, pred)
-
-        # Phase 2: g_P(Y)
-        best = float('-inf'); best_choice = None
+    # find the best sinks for each ideal
+    for Y in ideals[1:]:  # skip the empty set
+        Ymax = get_maximal(Y, pred)  # the possible sinks for Y
+        best_score = float('-inf')  # the highest total score we can achieve for this ideal Y after deciding on its sink
+        best_choice = None  # the smaller ideal (Y without that best sink)
+        # which is the "previous state" in the dynamic program that led to this best_score
         for v in Ymax:
-            Ym = frozenset(set(Y) - {v})
-            cand = g[Ym] + fhat[(v, Ym)]
-            if cand > best:
-                best = cand
-                best_choice = (v, Ym)
-        g[Y] = best
-        g_bp[Y] = best_choice
+            Y_minus_v = frozenset(set(Y) - {v})  # previous ideal = nodes that can be parents of v
+            score = ss[Y_minus_v] + bss[v][Y_minus_v]  # best rest + best local for v seen from Y\{v}
+            if score > best_score:
+                best_score = score
+                best_choice = Y_minus_v
+        ss[Y] = best_score  # best score for ideal Y
+        prev[Y] = best_choice  # store the predecessor ideal (Y\{v*}) that achieved ss[Y].
+        # during backtracking, the chosen sink is v* = (Y - prev[Y]).pop(),
+        # and its parents are bps[v*][prev[Y]].
 
-        # Phase 1: fhat[v, Y] for all v
-        A = Ymax
-        tail_sets = get_tail(A, set(Y))  # same for all v at this Y
+        # find the best parents (local dynamic programming step)
+        # For each variable v, find its best parent set within the current ideal 
+        tail_sets = get_tail(Ymax, set(Y))  # all subsets of Y that include every sink in Y
         for v in M:
-            best_val = float('-inf'); best_src = None
-            Fv = F_downclosed[v]
-            # tail ∩ Fv
-            for Z in tail_sets:
-                if Z in Fv:
-                    sc = LS[v].get(Z, float('-inf'))
-                    if sc > best_val:
-                        best_val = sc; best_src = ('tail', Z)
-            # recurrence via removing a maximal u
-            for u in A:
-                Ym_u = frozenset(set(Y) - {u})
-                val2 = fhat[(v, Ym_u)]
-                if val2 > best_val:
-                    best_val = val2; best_src = ('prev', Ym_u)
-            fhat[(v, Y)] = best_val
-            fhat_bp[(v, Y)] = best_src
+            best_bss = float('-inf')
+            best_parents = None
 
-    return g[frozenset(M)], {'g_bp': g_bp, 'fhat_bp': fhat_bp}
+            # 1. check if the best parent set is in the tail sets
+            Fv = F_downclosed[v]  # valid parent sets for v
+            for Z in tail_sets:  # loop over all candidate parent sets
+                if Z in Fv:  # only consider valid parent sets
+                    local_score_Z = LS[v].get(Z, float('-inf'))  # local score for v with parents Z
+                    if local_score_Z > best_bss:
+                        best_bss = local_score_Z
+                        best_parents = Z
+
+            # 2. check if the best parent set is inherited from a smaller ideal (increasing the network size doesnt improve the score)
+            for u in Ymax:
+                Y_minus_u = frozenset(set(Y) - {u})
+                inherited_score = bss[v][Y_minus_u]  # best local score for v inherited from a smaller ideal (Y without one of its sinks)
+                if inherited_score > best_bss:
+                    best_bss = inherited_score
+                    best_parents = bps[v][Y_minus_u]
+
+            bss[v][Y] = best_bss
+            bps[v][Y] = best_parents if best_parents is not None else empty
+
+    return ss[frozenset(M)], {
+        'po': po,
+        'ideals': ideals,
+        'ss': ss,
+        'prev': prev,
+        'bss': bss,
+        'bps': bps,
+    }
 
 
-# loop over all partial orders, and keep the best
+# ---------- Loop over partial orders and keep the best ----------
 best_score = float('-inf')
-best_P = None
-best_bp = None
+best_run = None
 
-for P in generate_partial_orders(blocks, front_choices_per_block):
-    score, bp = algorithm1(M, P, LS, F_downclosed)
+for po in generate_partial_orders(blocks, front_choices_per_block):
+    score, run = algorithm1(M, po, LS, F_downclosed)
     if score > best_score:
-        best_score, best_P, best_bp = score, P, bp
+        best_score = score
+        best_run = run
 
 print("Best score:", best_score)
-print("Best partial order edges:", best_P)
-print("Best back pointers:", best_bp)  # optional
+print("Best partial order edges (po):", best_run['po'])
 
+def reconstruct_parent_map(
+    V: List[str],
+    ideals: List[FrozenSet[str]],
+    ss: Dict[FrozenSet[str], float],
+    prev: Dict[FrozenSet[str], FrozenSet[str]],
+    bss: Dict[str, Dict[FrozenSet[str], float]],
+    bps: Dict[str, Dict[FrozenSet[str], FrozenSet[str]]],
+):
+    """
+    Finds the parent set for each variable in the optimal network found by iterating Algorithm 1.
+    """
+    parents: Dict[str, List[str]] = {v: [] for v in V}
 
-def reconstruct_parent_map(M: Iterable[str],
-                           g_bp: Dict[FrozenSet[str], Tuple[str, FrozenSet[str]]],
-                           fhat_bp: Dict[Tuple[str, FrozenSet[str]], Tuple[str, FrozenSet[str]]]
-                          ) -> Dict[str, List[str]]:
-    M = list(M)
-    parents: Dict[str, List[str]] = {v: [] for v in M}
-
-    Y = frozenset(M)
+    Y = frozenset(V)
+    # Work backwards through ss/prev to get the sink order and chosen v’s
     while Y:
-        v, Ym = g_bp[Y]
-
-        # Walk fhat backpointers until we hit the chosen tail set (the actual parent set)
-        state = Ym
-        visited = set()
-        while True:
-            key = (v, state)
-            if key not in fhat_bp:
-                # No record (e.g., state == ∅ and only base score set) → parents = []
-                Z = frozenset()
-                break
-            tag, info = fhat_bp[key]
-            if tag == 'tail':
-                Z = info           # this is the chosen parent set for v
-                break
-            elif tag == 'prev':
-                if state in visited:
-                    raise RuntimeError("Cycle in fhat_bp")
-                visited.add(state)
-                state = info       # keep walking
-            else:
-                raise RuntimeError(f"Unknown fhat tag: {tag}")
-
-        parents[v] = sorted(Z)
+        Ym = prev[Y]
+        if Ym is None:
+            break
+        added = set(Y) - set(Ym)
+        if not added:
+            break
+        # pick the variable v that was added last
+        v = next(iter(added))
+        # The parent set for v is what bps[v] had at Ym (where v was still outside)
+        Z = bps[v][Ym]
+        parents[v] = Z
         Y = Ym
-
     return parents
 
-def print_parent_map(M: Iterable[str],
-                     bp: Dict[str, Dict]) -> None:
-    pm = reconstruct_parent_map(M, bp['g_bp'], bp['fhat_bp'])
-    for v in M:   # keep your chosen order
-        print(f"{v}: {pm[v]!r}")
+pm = reconstruct_parent_map(
+    V,
+    best_run['ideals'],
+    best_run['ss'],
+    best_run['prev'],
+    best_run['bss'],
+    best_run['bps'],
+)
 
-print_parent_map(M, best_bp)
+for v in V:
+    print(f"{v}: {pm[v]}")
