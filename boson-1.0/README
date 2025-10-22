@@ -1,0 +1,61 @@
+BOSON (Bucket Order Scheme for Optimal Networks)
+
+Copyright 2009, 2012 Pekka Parviainen <pekkapa(at)kth.se>
+
+Software for exact learning of Bayesian network structures using parallel bucket order schemes.
+
+
+Licence
+=======
+
+This software is distributed under GNU GPL. See COPYING.
+
+
+Compilation
+===========
+
+Compilation:
+
+  make
+  
+Compiling has been tested on Linux (Ubuntu 12.04) using g++ (version 4.6.3).
+
+
+Usage
+=====
+
+Usage:
+
+  .\boson [options]
+  
+For available options, see the parameters section below.
+
+The first line of the input file should consist of the possible parent set coded as integers. Note that these must match the sets of size at most m, where m is the maximum indegree parameter (see, the next section). The following lines contain the local scores for each variable and possible parent set. See example.dat.
+
+
+Parameters
+==========
+
+maximum indegree (-m)
+  The maximum number of parents that a node can have. Default is 3.
+  
+bucket size (-s)
+  The program uses (ceil(s/2) * floor(s/2)) bucket orders schemes. Default is 2.
+
+number of parallel bucket orders (-p)
+  Tells how many bucket orders (determined by s) are considered in parallel. Default is 0 (the standard dynamic programming algorithm).
+  
+data file (-d)  
+  The name of the input data file. 
+
+
+Examples
+========
+
+Run the program with the default parameters:
+
+  ./boson -d example.data
+  
+Find an optimal network when example.dat contains scores for parent sets up to size 3 using 2 parallel (3*3) bucket orders:
+
+  ./boson -d example.dat -m 4 -s 6 -p 2

@@ -78,7 +78,7 @@ def get_best_sinks(
     sinks = {frozenset(): None}
     scores = {frozenset(): 0.0}
 
-    # process subsets in size-then-lex order
+    # loop over all combinations of variables in increasing size
     for r in range(1, len(V) + 1):
         for w in combinations(V, r):
             W = frozenset(w)
@@ -91,8 +91,9 @@ def get_best_sinks(
                 upvars  = W - {sink}  # W \ {sink}
                 # Only keep parents the child can actually have (per pruned LS)
                 upvars_v = frozenset(x for x in upvars if x in support.get(sink, set()))
-
                 parents =  bps[sink].get(upvars_v, frozenset()) 
+
+                # total = score(best parents from W\{sink}) + local score(sink, parents)
                 total = scores[upvars] + LS[sink].get(parents, float('-inf'))
 
                 # if total > scores[W] then update
