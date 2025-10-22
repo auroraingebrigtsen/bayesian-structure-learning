@@ -38,30 +38,6 @@ front_choices_per_block: List[List[Set[str]]] = [
     [set(F) for F in combinations(block, a)] for block in blocks
 ]
 
-def downward_closure(LS: Dict[str, Dict[FrozenSet[str], float]]
-                    ) -> Dict[str, Set[FrozenSet[str]]]:
-    """
-    The local scores may only contain some parent sets for each variable v, because of pruning.
-    Algorithm 1 requires that for every allowed parent set Z all its subsets are also 
-    considered valid (this property is called downward-closed). 
-
-    This function ensures that: for each variable v, if Z appears in LS[v], then every subset S ⊆ Z is
-    also included.
-    """
-    f: Dict[str, Set[FrozenSet[str]]] = {}
-    for v, score_map in LS.items():
-        fv: Set[FrozenSet[str]] = set()
-        for Z in score_map:  # each allowed parent set
-            fv.update(
-                map(frozenset,
-                    chain.from_iterable(combinations(Z, r) for r in range(len(Z) + 1)))
-            )
-        f[v] = fv
-    return f
-
-F_downclosed = downward_closure(LS) 
-
-
 def generate_partial_orders(
     blocks: List[Set[str]],
     front_choices_per_block: List[List[Set[str]]]
@@ -133,30 +109,10 @@ def get_maximal(Y: FrozenSet[str], pred: Dict[str, Set[str]]) -> Set[str]:
                 maxes.discard(u)
     return maxes
 
-def get_tail(Y: Set[str], Y_hat: Set[str]) -> List[FrozenSet[str]]:
-    """
-    Function to get the tail of a set Y.
-    The tail is the interval [Y_hat, Y], which is all subsets of Y that contain all maximal elements of Y.
-    """
-    tail_sets: List[FrozenSet[str]] = []
-
-    remaining = Y - Y_hat
-
-    # for every possible subset of the remaining elements
-    for r in range(len(remaining) + 1):
-        #  for all combinations of size r
-        for subset in combinations(remaining, r):
-            # combine Y_hat with this subset , since Y_hat must be included
-            new_set = frozenset(Y_hat.union(subset))
-            tail_sets.append(new_set)
-
-    return tail_sets
-
 def algorithm1(
     M: Set[str],
     P: Set[Edge],
     LS: Dict[str, Dict[FrozenSet[str], float]],
-    F_downclosed: Dict[str, Set[FrozenSet[str]]]
 ):
     """
     Implementation of Algorithm 1.
@@ -194,28 +150,31 @@ def algorithm1(
         # during backtracking, the chosen sink is v* = (Y - prev[Y]).pop(),
         # and its parents are bps[v*][prev[Y]].
 
-        # find the best parents (local dynamic programming step)
-        # For each variable v, find its best parent set within the current ideal 
-        tail_sets = get_tail(Y, Ymax)  # all subsets of Y that include every sink in Y
+        # find the best parents (local DP step)
+        # for each variable v, find its best parent set within the current ideal 
         for v in M:
             best_bss = float('-inf')
-            best_parents = None
+            best_parents = empty
 
-            # 1. check if the best parent set is in the tail sets
-            Fv = F_downclosed[v]  # valid parent sets for v
-            for Z in tail_sets:  # loop over all candidate parent sets
-                if Z in Fv:  # only consider valid parent sets
-                    local_score_Z = LS[v].get(Z, float('-inf'))  # local score for v with parents Z
-                    if local_score_Z > best_bss:
-                        best_bss = local_score_Z
-                        best_parents = Z
+            # we must consider all parent sets Z that lie within the tail of Y 
+            # which is the interval [Ŷ, Y], where Ŷ = YMax
+            LB = frozenset(set(Ymax) - {v})   #  lower bound, must include all maximal elements except v
+            UB = frozenset(set(Y) - {v})   # upper bound, must be a subset of Y (excluding v)
 
-            # 2. check if the best parent set is inherited from a smaller ideal (increasing the network size doesnt improve the score)
+            # Instead of generating all subsets between LB and UB, we can loop over the existing scored parent sets from LS[v].
+            # for each one, we check if it falls inside the tail interval [LB, UB], and if it does, it’s a valid candidate parent set for this ideal Y.
+            for parents, score in LS[v].items():
+                if LB.issubset(parents) and parents.issubset(UB):  # checking if Z is inside the tail interval
+                    if score > best_bss:
+                        best_bss = score
+                        best_parents = parents
+
+            # check if the best score for v can be inherited from a smaller ideal
+            # if removing a maximal element u gives a better score, reuse that result
             for u in Ymax:
                 Y_minus_u = frozenset(set(Y) - {u})
-                inherited_score = bss[v][Y_minus_u]  # best local score for v inherited from a smaller ideal (Y without one of its sinks)
-                if inherited_score > best_bss:
-                    best_bss = inherited_score
+                if bss[v][Y_minus_u] > best_bss:
+                    best_bss = bss[v][Y_minus_u]
                     best_parents = bps[v][Y_minus_u]
 
             bss[v][Y] = best_bss
@@ -231,12 +190,11 @@ def algorithm1(
     }
 
 
-# ---------- Loop over partial orders and keep the best ----------
 best_score = float('-inf')
 best_run = None
 
 for P in generate_partial_orders(blocks, front_choices_per_block):
-    score, run = algorithm1(M, P, LS, F_downclosed)
+    score, run = algorithm1(M, P, LS)
     if score > best_score:
         best_score = score
         best_run = run
