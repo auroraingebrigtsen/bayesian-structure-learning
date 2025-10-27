@@ -17,6 +17,10 @@ uv sync --all-extras --all-packages --all-groups
 source .venv/bin/activate
 ```
 
+Run a file by the uv command:
+```bash
+uv run <file_name>
+```
 
 ## Project Structure
 
