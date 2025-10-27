@@ -5,7 +5,12 @@ Implementations of different BN structure learning algorithms.
 ## Getting Started
 The project requires that you have [`uv`](https://docs.astral.sh/uv/) installed.
 
-Create a virtual environment and install requirements:
+Create a virtual environment: 
+```bash
+uv venv
+```
+
+Install requirements:
 
 ```bash
 uv sync --all-extras --all-packages --all-groups
