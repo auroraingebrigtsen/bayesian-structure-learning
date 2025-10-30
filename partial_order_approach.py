@@ -4,39 +4,46 @@ Parviainen, P. and Koivisto, M., 2013. Finding optimal Bayesian networks using p
 The Journal of Machine Learning Research, 14(1), pp.1387-1415
 """
 
-from itertools import combinations, product, chain
-from math import ceil, floor
+from itertools import combinations, product
+from math import ceil
 from typing import List, Dict, Tuple, FrozenSet, Iterable, Set
 from pygobnilp.gobnilp import read_local_scores
-from collections import defaultdict
 
 Edge = Tuple[str, str]
 
-LS= read_local_scores("local_scores/local_scores_asia_10000.jaa")
-V: List[str] = list(LS.keys())
-M: Set[str] = set(V) 
-n = len(V)
+def downwards_closed(LS:Dict[str, Dict[FrozenSet[str], float]])-> Dict[str, Dict[FrozenSet[str], float]]:
+    """
+    The algorithm assumes that the local scores are downwards closed. That means that if a parent set Z has a defined score for v,
+    then all subsets of Z also have a defined score for v.
+    This function ensures that the local scores satisfy this property by adding -inf scores for missing subsets.
+    """
+    downwards_closed_LS = {}
+    for v, scored_parent_sets in LS.items():
+        all_parent_sets = set()
+        for ps in scored_parent_sets.keys():
+            all_parent_sets.update(frozenset(subset) for r in range(len(ps)+1) for subset in combinations(ps, r))
+        for ps in all_parent_sets:
+            if ps not in scored_parent_sets:
+                scored_parent_sets[ps] = float('-inf')
+        downwards_closed_LS[v] = scored_parent_sets
+    return downwards_closed_LS
 
-print("Variables:", V)
-print("Number of variables:", n)
+def make_blocks_and_fronts(
+    V: List[str], m: int, p: int
+) -> Tuple[List[Set[str]], List[List[Set[str]]], List[str]]:
+    """
+    Create p disjoint blocks of size m from V, the free block (remaining variables),
+    and the list of possible front subsets (of size a) for each block.
 
-# BUCKET ORDER SCHEME PARAMETERS
-m: int = 3  # size of each bucket order
-p: int = 2  # number of disjoint bucket orders
-assert p * m <= n
-assert m >= 2 and p >= 1
-
-a = ceil(m / 2)  # front bucket size
-
-blocks: List[Set[str]] = [set(V[i*m:(i+1)*m]) for i in range(p)]
-free_block = V[p*m:]  # remaining variables 
-print("Blocks:", blocks)
-print("Free block:", free_block)
-
-# all combinations of each block for fronts
-front_choices_per_block: List[List[Set[str]]] = [
-    [set(F) for F in combinations(block, a)] for block in blocks
-]
+    Returns (blocks, front_choices_per_block, free_block).
+    """
+    a = ceil(m / 2)  # front bucket size
+    blocks: List[Set[str]] = [set(V[i * m : (i + 1) * m]) for i in range(p)]
+    free_block = V[p * m :]
+    front_choices_per_block: List[List[Set[str]]] = [
+        [set(F) for F in combinations(block, a)] for block in blocks
+    ]
+    return blocks, front_choices_per_block, free_block
 
 def generate_partial_orders(
     blocks: List[Set[str]],
@@ -45,22 +52,11 @@ def generate_partial_orders(
     """
     Generates all partial orders that you get by the two bucket scheme.
     """
-    per_block_pairs: List[List[Tuple[Set[str], Set[str]]]] = []
-
-    # for each block and its possible fronts
-    for block, fronts in zip(blocks, front_choices_per_block):
-        pairs_for_block: List[Tuple[Set[str], Set[str]]] = []
-        
-        # for each possible choice of front in this block
-        for front in fronts:
-            back = block - front # the elements not in the front
-            pairs_for_block.append((front, back))
-        per_block_pairs.append(pairs_for_block)
-
-    for choice in product(*per_block_pairs):  # one (front, back) per block
-        edges: Set[Edge] = set()
-        for front, back in choice:
-            edges.update((u, v) for u in front for v in back)
+    for choice in product(*front_choices_per_block):  # one front per block
+        edges = set()
+        for front, block in zip(choice, blocks):
+            back = block - front
+            edges |= {(u, v) for u in front for v in back}
         yield edges
 
 def predecessors(M: Set[str], P: Set[Edge]) -> Dict[str, Set[str]]:
@@ -70,45 +66,49 @@ def predecessors(M: Set[str], P: Set[Edge]) -> Dict[str, Set[str]]:
 
     Returns a map from each element of M to its set of predecessors.
     """
-    pred: Dict[str, Set[str]] = {u: set() for u in M}
+    pred = {u: set() for u in M}
     for u, v in P:
-        if u == v:
-            continue
-        pred.setdefault(u, set())
-        pred.setdefault(v, set()).add(u)
+        if u != v:
+            pred[v].add(u)
     return pred
 
 def get_ideals(M: Set[str], pred: Dict[str, Set[str]]) -> List[FrozenSet[str]]:
-    ideals: Set[FrozenSet[str]] = set()
-    stack = [(frozenset(), frozenset(M))]  # (included, remaining)
-    seen = set()
+    """
+    Function to get all ideals of the partial order defined by pred.
+    An ideal is a subset Y ⊆ M such that for every y ∈ Y, all predecessors of y are also in Y.
+    """
+    ideals: List[FrozenSet[str]] = []
+    seen: Set[FrozenSet[str]] = set()
 
-    while stack:
-        included, remaining = stack.pop()
-        ideals.add(included)
+    def backtrack(included: FrozenSet[str]):
+        if included in seen:   # avoid revisiting the same ideal via different addition orders
+            return
+        seen.add(included)
+        ideals.append(included)
 
-        available = {x for x in remaining if pred[x] <= included}
-        if not available:
-            continue
+        # elements that can be added next (deterministic order)
+        available = [x for x in sorted(M - included) if pred[x] <= included]
+        for x in available:
+            backtrack(included | frozenset({x}))
 
-        for x in sorted(available):
-            stack.append((included | {x}, remaining - {x}))  # include x
-            stack.append((included, remaining - {x})) # exclude x
-
-    return sorted(ideals, key=lambda s: (len(s), sorted(s)))
+    backtrack(frozenset())
+    ideals.sort(key=lambda s: (len(s), tuple(sorted(s))))
+    return ideals
 
 def get_maximal(Y: FrozenSet[str], pred: Dict[str, Set[str]]) -> Set[str]:
     """
     Function to get the maximal elements of Y ⊆ M w.r.t. the partial order defined by pred.
     The maximal elements are those that have no successors in Y.
     """
-    Ys = set(Y)
-    maxes = set(Ys)
-    for y in Ys:
-        for u in pred[y]:
-            if u in Ys:
-                maxes.discard(u)
-    return maxes
+    maximal: Set[str] = set()
+
+    for y in Y:
+        # Check if y appears as a predecessor of any other node in Y
+        has_successor_in_Y = any(y in pred[z] for z in Y if z != y)
+        if not has_successor_in_Y:
+            maximal.add(y)
+
+    return maximal
 
 def algorithm1(
     M: Set[str],
@@ -121,86 +121,71 @@ def algorithm1(
     pred = predecessors(M, P)
     ideals = get_ideals(M, pred)
 
-    bss: Dict[str, Dict[FrozenSet[str], float]] = {v: {} for v in M}  # best local score for v at ideal Y
+    bss: Dict[str, Dict[FrozenSet[str], float]] = {v: {} for v in M}  # best local score for v when parents must lie inside Y
     bps: Dict[str, Dict[FrozenSet[str], FrozenSet[str]]] = {v: {} for v in M}  # chosen parent set for v at ideal Y
-    ss: Dict[FrozenSet[str], float] = {}  # best total score over DAGs on Y
-    prev: Dict[FrozenSet[str], FrozenSet[str]] = {}  # predecessor ideal that yields ss[Y] 
+    g_p: Dict[FrozenSet[str], float] = {}  # best total score over DAGs on Y
+    prev: Dict[FrozenSet[str], FrozenSet[str]] = {}  # predecessor ideal (Y without the chosen sink)
 
     empty = frozenset()
-    ss[empty] = 0.0
+    g_p[empty] = 0.0
     prev[empty] = empty
 
+    # base local scores at the empty ideal
     for v in M:
         bss[v][empty] = LS[v].get(empty, float('-inf'))
         bps[v][empty] = empty
 
-    # find the best sinks for each ideal
-    for Y in ideals[1:]:  # skip the empty set
-        Ymax = get_maximal(Y, pred)  # the possible sinks for Y
-        best_score = float('-inf')  # the highest total score we can achieve for this ideal Y after deciding on its sink
-        best_choice = None  # the smaller ideal (Y without that best sink)
-        # which is the "previous state" in the dynamic program that led to this best_score
-        for v in Ymax:
-            Y_minus_v = frozenset(set(Y) - {v})  # previous ideal = nodes that can be parents of v
-            score = ss[Y_minus_v] + bss[v][Y_minus_v]  # best rest + best local for v seen from Y\{v}
+    # for each non-empty Y ∈ I(P) 
+    for Y in ideals[1:]:  
+        Ymax = get_maximal(Y, pred)
+
+        # 3a: choose sink v ∈ Ymax
+        best_score = float('-inf')
+        best_choice = None
+        for v in Ymax:  # the sink must be maximal in Y
+            Y_minus_v = Y - {v} 
+            score = g_p[Y_minus_v] + bss[v][Y_minus_v]  # best rest + best local for v seen from Y\{v}
             if score > best_score:
                 best_score = score
                 best_choice = Y_minus_v
-        ss[Y] = best_score  # best score for ideal Y
-        prev[Y] = best_choice  # store the predecessor ideal (Y\{v*}) that achieved ss[Y].
-        # during backtracking, the chosen sink is v* = (Y - prev[Y]).pop(),
-        # and its parents are bps[v*][prev[Y]].
+        g_p[Y] = best_score  # best score for ideal Y
+        prev[Y] = best_choice  #
 
-        # find the best parents (local DP step)
-        # for each variable v, find its best parent set within the current ideal 
-        for v in M:
+        # 3b: local DP over tail for each v ∈ Y
+        for v in M: 
             best_bss = float('-inf')
             best_parents = empty
 
-            # we must consider all parent sets Z that lie within the tail of Y 
-            # which is the interval [Ŷ, Y], where Ŷ = YMax
-            LB = frozenset(set(Ymax) - {v})   #  lower bound, must include all maximal elements except v
-            UB = frozenset(set(Y) - {v})   # upper bound, must be a subset of Y (excluding v)
+            # consider all parent sets Z that lie within the tail of Y, which is the interval [Ŷ, Y], where Ŷ = YMax
+            LB = frozenset(Ymax - {v})   #  lower bound, must include all maximal elements except v
+            UB = frozenset(Y - {v})   # upper bound, must be a subset of Y (excluding v)
 
-            # Instead of generating all subsets between LB and UB, we can loop over the existing scored parent sets from LS[v].
-            # for each one, we check if it falls inside the tail interval [LB, UB], and if it does, it’s a valid candidate parent set for this ideal Y.
-            for parents, score in LS[v].items():
-                if LB.issubset(parents) and parents.issubset(UB):  # checking if Z is inside the tail interval
+            # Check scored parent sets that fall in [LB, UB]
+            for Z, score in LS[v].items():  # all scored parent sets for v
+                if LB.issubset(Z) and Z.issubset(UB):  # intersection with the tail interval
                     if score > best_bss:
                         best_bss = score
-                        best_parents = parents
+                        best_parents = Z
 
-            # check if the best score for v can be inherited from a smaller ideal
-            # if removing a maximal element u gives a better score, reuse that result
+            # inherit from smaller parent sets Y\{u}, u ∈ Ymax
             for u in Ymax:
-                Y_minus_u = frozenset(set(Y) - {u})
-                if bss[v][Y_minus_u] > best_bss:
-                    best_bss = bss[v][Y_minus_u]
+                Y_minus_u = Y - {u}
+                cand = bss[v].get(Y_minus_u, float('-inf'))
+                if cand > best_bss:
+                    best_bss = cand
                     best_parents = bps[v][Y_minus_u]
 
             bss[v][Y] = best_bss
-            bps[v][Y] = best_parents if best_parents is not None else empty
+            bps[v][Y] = best_parents if best_parents != empty else empty
 
-    return ss[frozenset(M)], {
-        'P': P, 'ideals': ideals, 'ss': ss, 'prev': prev, 'bss': bss, 'bps': bps,
+    return g_p[frozenset(M)], {
+        'P': P, 'ideals': ideals, 'ss': g_p, 'prev': prev, 'bss': bss, 'bps': bps,
 }
 
 
-best_score = float('-inf')
-best_run = None
-
-for P in generate_partial_orders(blocks, front_choices_per_block):
-    score, run = algorithm1(M, P, LS)
-    if score > best_score:
-        best_score = score
-        best_run = run
-
 def reconstruct_parent_map(
     V: List[str],
-    ideals: List[FrozenSet[str]],
-    ss: Dict[FrozenSet[str], float],
     prev: Dict[FrozenSet[str], FrozenSet[str]],
-    bss: Dict[str, Dict[FrozenSet[str], float]],
     bps: Dict[str, Dict[FrozenSet[str], FrozenSet[str]]],
 ):
     """
@@ -209,7 +194,6 @@ def reconstruct_parent_map(
     parents: Dict[str, FrozenSet[str]] = {v: frozenset() for v in V}
 
     Y = frozenset(V)
-    # Work backwards through ss/prev to get the sink order and chosen v’s
     while Y:
         Ym = prev[Y]
         if Ym is None:
@@ -217,22 +201,58 @@ def reconstruct_parent_map(
         added = set(Y) - set(Ym)
         if not added:
             break
-        # pick the variable v that was added last
         v = next(iter(added))
-        # The parent set for v is what bps[v] had at Ym (where v was still outside)
         Z = bps[v][Ym]
         parents[v] = Z
         Y = Ym
     return parents
 
-pm = reconstruct_parent_map(
-    V,
-    best_run['ideals'],
-    best_run['ss'],
-    best_run['prev'],
-    best_run['bss'],
-    best_run['bps'],
-)
 
-for v in V:
-    print(f"{v}: {pm[v]}")
+def partial_order_approach(local_scores_path: str, m: int = 3, p: int = 2):
+    """ Main function to run the partial order approach for Bayesian network structure learning.
+    Implements the two-bucket partial order scheme.
+
+    local_scores_path: Path to the local scores file in JAA format.
+    m: Size of each bucket order.
+    p: Number of disjoint bucket orders. 
+    returns: A parent map representing the optimal Bayesian network structure found.
+    """
+
+    LS_raw= read_local_scores(local_scores_path)
+    LS = downwards_closed(LS_raw)
+
+    V: List[str] = list(LS.keys())
+    M: Set[str] = set(V) 
+    n = len(V)
+
+    assert p * m <= n
+    assert m >= 2 and p >= 1
+
+    print("Variables:", V)
+    print("Number of variables:", n)
+
+    blocks, front_choices_per_block, free_block = make_blocks_and_fronts(V, m, p)
+    print("Blocks:", blocks)
+    print("Free block:", free_block)
+
+    best_score = float('-inf')
+    best_run = None
+
+    for P in generate_partial_orders(blocks, front_choices_per_block):
+        score, run = algorithm1(M, P, LS)
+        if score > best_score:
+            best_score = score
+            best_run = run
+
+    pm = reconstruct_parent_map(
+        V,
+        best_run['prev'],
+        best_run['bps'],
+    )
+
+    print("\nOptimal Parent Map:")
+    for v in V:
+        print(f"{v}: {pm[v]}")
+
+
+partial_order_approach("local_scores/local_scores_asia_10000.jaa", m=8, p=1)
