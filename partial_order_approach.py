@@ -258,6 +258,3 @@ def partial_order_approach(local_scores_path: str, m: int = 3, p: int = 2):
     print("\nOptimal Parent Map:")
     for v in V:
         print(f"{v}: {pm[v]}")
-
-
-partial_order_approach("local_scores/local_scores_asia_10000.jaa", m=8, p=1)
