@@ -2,17 +2,16 @@ import sys
 from pathlib import Path
 import pytest
 
-ROOT = Path(__file__).resolve().parents[1] 
+ROOT = Path(__file__).resolve().parents[2] 
 sys.path.insert(0, str(ROOT))
 
-from silander_myllymaki import get_optimal_network
-from write_local_scores import write_local_scores
+from bnsl_algorithms.silander_myllymaki import get_optimal_network
 
 from pygobnilp.gobnilp import Gobnilp
 
 DATASETS = [
-    #("pygobnilp/data/alarm_100.dat", "local_scores/local_scores_alarm_100.jaa"),
-    ("pygobnilp/data/alarm_10000.dat", "local_scores/local_scores_child_10000.jaa"),
+    ("pygobnilp/data/asia_10000.dat", "local_scores/local_scores_asia_10000.jaa"),
+    #("pygobnilp/data/child_10000.dat", "local_scores/local_scores_child_10000.jaa"),
 ]
 
 @pytest.mark.slow

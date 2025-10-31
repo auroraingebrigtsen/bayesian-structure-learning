@@ -1,6 +1,6 @@
-from write_local_scores import write_local_scores
-from silander_myllymaki import get_optimal_network
-from partial_order_approach import partial_order_approach
+from scripts.write_local_scores import write_local_scores
+from bnsl_algorithms.silander_myllymaki import get_optimal_network
+from bnsl_algorithms.partial_order_approach import partial_order_approach
 import os
 
 DATA_PATH = "pygobnilp/data/asia_10000.dat"

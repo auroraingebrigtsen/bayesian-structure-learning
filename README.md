@@ -24,19 +24,21 @@ uv run <file_name>
 
 ## Project Structure
 
-This project **does not** implement score computation directly — instead we rely on [`pygobnilp`](https://bitbucket.org/jamescussens/pygobnilp/src/master/) to calculate local scores.
+This project **does not** implement score computation directly, instead we rely on [`pygobnilp`](https://bitbucket.org/jamescussens/pygobnilp/src/master/) to calculate local scores.
 
 ### Data and Scores
 - The algorithms in this project assume that **local scores** for your dataset are already available.  
 These must be stored as **Jaakkola local-scores files** inside a folder. See the section [Interpreting Jaakkola local-scores file](#interpreting-jaakkola-local-scores-file-jaa-files) for details.
 
-- To generate these files, run: `write_local_scores.py` pointing it to the dataset you want to process. This will create the `local_scores/` folder (if it does not exist) and write the `.jaa` file for you. Alternatively, this step can be included in the main loop.
+- To generate these files, run: `scripts/write_local_scores.py` pointing it to the dataset you want to process. This will create the `local_scores/` folder (if it does not exist) and write the `.jaa` file for you. Alternatively, this step can be included in the main loop.
 
 - The data itself can either be retrieved from the pygobnilp subrepo, available in the folder: `pygobnilp/data/`. or custom datasets can be placed in the `data/`-folder. 
 
-- If you want to generate your own data from a given bayesian network into  the `data/`-folder, use the  `sample_data.py` script. This assumes a `.bif`-file specifying the network exists in the `networks/`-folder.
+- If you want to generate your own data from a given bayesian network into  the `data/`-folder, use the  `scripts/sample_data.py` script. This assumes a `.bif`-file specifying the network exists in the `networks/`-folder.
 
 ### Implementation
+The following algorithms are located in the  `bnsl_algorithms`-folder:
+
 - `silander_myllymaki.py` contains an implementation of the algorithm described in:  
 
     > **Silander, T. & Myllymäki, P. (2012)**  

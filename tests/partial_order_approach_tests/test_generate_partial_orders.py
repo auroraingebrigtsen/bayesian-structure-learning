@@ -6,7 +6,7 @@ from math import comb
 ROOT = Path(__file__).resolve().parents[2] 
 sys.path.insert(0, str(ROOT))
 
-from partial_order_approach import generate_partial_orders, make_blocks_and_fronts
+from bnsl_algorithms.partial_order_approach import generate_partial_orders, make_blocks_and_fronts
 
 def get_expected_size_of_partial_orders(m: int, p: int) -> int:
     """ Returns the expected number of ideals for given m and p values. """
