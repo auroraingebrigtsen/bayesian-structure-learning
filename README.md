@@ -32,10 +32,9 @@ These must be stored as **Jaakkola local-scores files** inside a folder. See the
 
 - To generate these files, run: `write_local_scores.py` pointing it to the dataset you want to process. This will create the `local_scores/` folder (if it does not exist) and write the `.jaa` file for you. Alternatively, this step can be included in the main loop.
 
-- The data itself can either be retrieved from the pygobnilp subrepo, available in the folder: `pygobnilp/data/`.
-- Alternatively, datasets can be placed in the `data/`-folder. 
+- The data itself can either be retrieved from the pygobnilp subrepo, available in the folder: `pygobnilp/data/`. or custom datasets can be placed in the `data/`-folder. 
 
-- If you want to generate your own data into  the `data/`-folder, use the  `sample_data.py` script. This assumes a `.bif`-file specifying the network exists in the `networks/`-folder.
+- If you want to generate your own data from a given bayesian network into  the `data/`-folder, use the  `sample_data.py` script. This assumes a `.bif`-file specifying the network exists in the `networks/`-folder.
 
 ### Implementation
 - `silander_myllymaki.py` contains an implementation of the algorithm described in:  
