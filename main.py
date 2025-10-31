@@ -10,7 +10,10 @@ def main():
     if not os.path.exists(SCORES_PATH):
         write_local_scores(DATA_PATH, SCORES_PATH)
 
+    print("\nRunning Silander & Myllymäki's algorithm...")
     get_optimal_network(SCORES_PATH)
+
+    print("\nRunning Partial Order Approach...")
     partial_order_approach(SCORES_PATH, m=3, p=2)
 
 
